@@ -1,0 +1,12 @@
+{
+    "exclude": [
+        "__pycache__",
+        ".git",
+        "env",
+        "venv",
+        "build"
+    ],
+
+    "typeCheckingMode": "strict",
+    "useLibraryCodeForTypes": true
+}
