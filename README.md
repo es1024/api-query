@@ -150,6 +150,21 @@ This will iterate through every item of the `documents` array in the response, p
 
 For an example, please see [examples/simple.query](examples/simple.query).
 
+## Generated Code
+
+To only view the generated code without running, you can run:
+
+```bash
+python3 -m api_query.compiler file.query
+```
+
+or use:
+```py
+import api_query
+
+generated_code = '\n'.join(api_query.compile(api_query.parse(api_query.lex(query_source))))
+```
+
 ## License
 
 This utility is licensed under the MIT License.
