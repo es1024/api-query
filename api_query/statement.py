@@ -166,6 +166,7 @@ class HTTPStatement(Statement):
 
     def compile(self, indent: str = '') -> str:
         sfx = f'{id(self)}'
+        body_value = repr(self.body) if not isinstance(self.body, str) else f'f"{self.body}"'
         data_arg = (
             f'data=__body{sfx}'
             if isinstance(self.body, str) else
@@ -176,7 +177,7 @@ class HTTPStatement(Statement):
         response_type = 'text' if isinstance(self.response, OutputIdentifier) else 'json'
         return (
                 f'{indent}__headers{sfx} = {self._output_headers(indent)}\n'
-                f'{indent}__body{sfx} = {repr(self.body)}\n'
+                f'{indent}__body{sfx} = {body_value}\n'
                 f'{indent}__url{sfx} = f{repr(self.url)}\n'
                 f'{indent}async with __limit:\n'
                 f'{indent}    __lib.LOG.info(f"Running {self.method} request to: {{__url{sfx}}}")\n'

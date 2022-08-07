@@ -101,7 +101,7 @@ def parse(tokens: Iterator[Token]) -> Iterator[Statement]:
             -tok('RSQUARE') >> flatten_many # type: ignore
     req_value.define(req_value_object | req_value_array | value) # type: ignore
 
-    http_body = req_value_object | req_value_array | tok('STRING')
+    http_body = req_value_object | req_value_array | (tok('STRING') >> eval)
 
     resp_value: Parser[Token, ResponseTemplate] = forward_decl()
     resp_value_object_check = json_path + -tok('COLON') + resp_value
