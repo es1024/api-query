@@ -2,13 +2,23 @@
 
 A simple tool to query REST APIs.
 
+## Installation
+
+`pip install api-query`
+
+Python 3.10+ is required.
+
 ## Usage
 
 ```
-api-query [--max-concurrent 1] [--log-level info] query-to-run.query
+api-query [--max-concurrent 1] [--log-level info] [--compile-only] query-to-run.query
 ```
 
 `query-to-run.query` should be of the format described in the next section.
+
+`--max-concurrent` specifies the maximum number of concurrently running statements.
+
+`--compile-only` causes the generated Python program to only be printed to stdout, instead of being run.
 
 ## Query Format
 
@@ -27,6 +37,28 @@ If no value is provided, e.g.
 PASSWORD =
 ```
 then the environmental variable of the same name is used instead (`$PASSWORD` in this case).
+
+### Python Statement
+
+Python statements can be inserted inline by prefixing them with a `!`. For example,
+```
+! print('hello')
+```
+
+Imports are handled automatically, but can also be specified manually with a Python statement.
+
+### Shell Command
+
+Shell commands can be inserted inline by prefixing them with a `>`. For example,
+```
+> ls
+```
+
+Output of these commands is not captured (and gets mixed into STDOUT), but the command itself is
+treated as a f-string, and thus can use variables:
+```
+> ffmpeg -i {URL} -c copy "{TITLE}.mp4"
+```
 
 ### HTTP Query
 
@@ -148,14 +180,14 @@ This will iterate through every item of the `documents` array in the response, p
 
 ## Example
 
-For an example, please see [examples/simple.query](examples/simple.query).
+For examples, please see [the examples directory](examples/).
 
 ## Generated Code
 
 To only view the generated code without running, you can run:
 
 ```bash
-python3 -m api_query.compiler file.query
+api-query --compile-only file.query
 ```
 
 or use:
