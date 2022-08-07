@@ -1,0 +1,64 @@
+FIREBASE_API_KEY = XXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+URL = https://127.0.0.1:5000
+
+# Leaving this empty means the value will be fetched from environmental variables at runtime instead.
+EMAIL =
+PASSWORD =
+
+# Login.
+POST https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}
+# POST body.
+- { email: EMAIL, password: PASSWORD, returnSecureToken: true }
+# Response handler. This assigns the value of .idToken in the response to ID_TOKEN. Unused fields
+# do not need to be listed.
+{ idToken -> ID_TOKEN }
+
+# Query {URL}/api/users. We assume this endpoint requires authorization, and returns a response of the 
+# form:
+# {
+#     "status": 200,
+#     "responses": [
+#         {
+#             "data": [
+#                  { "id": ..., "attributes": { "title": ..., ... }, ...},
+#                  ...
+#             ],
+#             ...
+#         }
+#     ],
+#     ...
+# }
+GET {URL}/api/entries
+# Set HTTP headers.
+- Authorization: Bearer {ID_TOKEN}
+{
+  # Assert that the status field is 200.
+  status: 200,
+  # The first (and only response).
+  responses[0].data: [
+    # For each entry in the array of the following form, we assign .id to ENTRY_ID
+    # and .title to TITLE, and then do further queries.
+    { id -> ENTRY_ID, attributes: { title -> TITLE } }
+
+    # For each entry, first query /api/entry/{ENTRY_ID}. This is assumed to return a response of the 
+    # form:
+    # {
+    #     "status": 200,
+    #     "responses": [
+    #         {
+    #             "video_url": ..., 
+    #             ...
+    #         }
+    #     ]
+    # }
+    GET {URL}/api/entry/{ENTRY_ID}
+    - Authorization: Bearer {ID_TOKEN}
+    { status: 200, responses[0].video_url -> VIDEO_URL }
+
+    # Replace forward slashes with underscores in TITLE.
+    ! TITLE = TITLE.replace('/', '_')
+
+    # Run ffmpeg to download the video.
+    > ffmpeg -i {VIDEO_URL} -c copy "{TITLE}.mp4"
+  ]
+}
