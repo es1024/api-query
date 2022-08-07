@@ -117,9 +117,9 @@ class HTTPStatement(Statement):
             return ''
         return (
             f'{indent}assert len(__p{sfx}) > {key}, f"{path} in response has fewer than {key + 1} elements"\n'
-            f'{indent}__p{id(r)} = __p{sfx}[{repr(key)}]\n'
+            f'{indent}__p{id(value)} = __p{sfx}[{repr(key)}]\n'
             f'{r}'
-            f'{indent}del __p{id(r)}\n'
+            f'{indent}del __p{id(value)}\n'
         )
 
     def _output_response_array(
