@@ -3,7 +3,7 @@ from pathlib import Path
 
 setup(
     name='api-query',
-    version='0.1.1',
+    version='0.2.0',
     description='Tool to generate and run a script to navigate a REST API.',
     long_description=(Path(__file__).parent / "README.md").read_text(),
     long_description_content_type="text/markdown",
