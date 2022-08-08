@@ -231,7 +231,7 @@ or use:
 ```py
 import api_query
 
-generated_code = '\n'.join(api_query.compile(api_query.parse(api_query.lex(query_source))))
+generated_code = api_query.compile(query_source)
 ```
 
 ## License
