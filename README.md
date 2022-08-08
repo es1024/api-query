@@ -1,6 +1,20 @@
 # api-query
 
-A simple tool to query REST APIs.
+A simple tool to query REST APIs with very little boilerplate. For example, to query and print the
+title and URL of new stories on HackerNews:
+
+```
+GET https://hacker-news.firebaseio.com/v0/newstories.json
+[
+    -> STORY_ID
+
+    GET https://hacker-news.firebaseio.com/v0/item/{STORY_ID}.json
+    { title? -> TITLE, url? -> URL }
+
+    ! print(f'Story {STORY_ID}: {TITLE} ({URL})')
+]
+```
+([examples/hn.query](examples/hn.query))
 
 ## Installation
 
@@ -11,7 +25,15 @@ Python 3.10+ is required.
 ## Usage
 
 ```
-api-query [--max-concurrent 1] [--log-level info] [--compile-only] query-to-run.query
+api-query
+    [--max-concurrent 1]
+    [--log-level info]
+    [--compile-only]
+    [--http-rate-limit 1]
+    [--http-retry-count 1]
+    [--http-base-delay 1.0]
+    [--http-max-delay 10.0]
+    query-to-run.query
 ```
 
 `query-to-run.query` should be of the format described in the next section.
@@ -19,6 +41,12 @@ api-query [--max-concurrent 1] [--log-level info] [--compile-only] query-to-run.
 `--max-concurrent` specifies the maximum number of concurrently running statements.
 
 `--compile-only` causes the generated Python program to only be printed to stdout, instead of being run.
+
+`--http-rate-limit` is the maximum number of HTTP requests sent per second (on average).
+
+`--http-retry-count` is the maximum number of times HTTP requests will be retried. The time between
+retries starts with the value of `--http-base-delay` (in seconds), and follows binary exponential
+backoff until it hits `--http-max-delay` (in seconds).
 
 ## Query Format
 
@@ -168,15 +196,24 @@ It is also possible to loop through an array in the response, and do further wor
 {
     documents: [
         { id -> DOCUMENT_ID }
-        
+
         GET http://.../{DOCUMENT_ID}
         -> DOCUMENT_CONTENTS
-        
+
         ! print(DOCUMENT_CONTENTS)
     ]
 }
 ```
 This will iterate through every item of the `documents` array in the response, perform a GET request, then print out the response.
+
+For object keys, adding a `?` between the end of the key and the start of the arrow will allow
+the key to not exist, in which case the variable is set to `None` instead, e.g.
+```
+{
+    user_id? -> USER_ID
+}
+```
+will set `USER_ID = None` if `user_id` is not a key in the response, instead of throwing an error.
 
 ## Example
 

@@ -7,7 +7,7 @@ from funcparserlib.parser import many, tok, finished, forward_decl, maybe, Parse
 from .statement import (Statement, PythonStatement, ShellStatement, HTTPStatement, Identifier,
                         RequestTemplate, RequestTemplateArray, RequestTemplateObject, Placeholder,
                         OutputIdentifier, ResponseTemplate, ResponseTemplateObject, ResponseTemplateArray,
-                        ResponseTemplateArrayHandler)
+                        ResponseTemplateArrayHandler, OptionalOutputIdentifier)
 
 WHITESPACE = re.compile(r'\s+')
 
@@ -103,26 +103,27 @@ def parse(tokens: Iterator[Token]) -> Iterator[Statement]:
 
     http_body = req_value_object | req_value_array | (tok('STRING') >> eval)
 
-    resp_value: Parser[Token, ResponseTemplate] = forward_decl()
-    resp_value_object_check = json_path + -tok('COLON') + resp_value
-    resp_value_object_assign = json_path + -tok('ARROW') + (tok('IDENTIFIER') >> OutputIdentifier)
-    resp_value_object_field = (resp_value_object_check | resp_value_object_assign) >> as_list
-    resp_value_object: Parser[Token, ResponseTemplateObject] = \
+    response: Parser[Token, ResponseTemplate] = forward_decl()
+    response_object_check = json_path + -tok('COLON') + response
+    response_object_assign1 = json_path + -tok('QMARK') + -tok('ARROW') + \
+                              (tok('IDENTIFIER') >> OptionalOutputIdentifier)
+    response_object_assign2 = json_path + -tok('ARROW') + (tok('IDENTIFIER') >> OutputIdentifier)
+    response_object_field = (response_object_check | response_object_assign1 |
+                             response_object_assign2) >> as_list
+    response_object: Parser[Token, ResponseTemplateObject] = \
             -tok('LBRACKET') + \
-            resp_value_object_field + many(-tok('COMMA') + resp_value_object_field) + \
+            response_object_field + many(-tok('COMMA') + response_object_field) + \
             -tok('RBRACKET') >> flatten_many >> process_jsonlike_object
-    resp_value_handler = \
+    response_handler = \
             -tok('LSQUARE') + \
-            resp_value + many(statement) + \
+            response + many(statement) + \
             -tok('RSQUARE') >> ResponseTemplateArrayHandler.make
-    resp_value_array: Parser[Token, ResponseTemplateArray] = \
+    response_array: Parser[Token, ResponseTemplateArray] = \
             -tok('LSQUARE') + \
-            resp_value + many(-tok('COMMA') + resp_value) + \
+            response + many(-tok('COMMA') + response) + \
             -tok('RSQUARE') >> flatten_many # type: ignore
-    resp_value.define(resp_value_object | resp_value_handler | resp_value_array | value) # type: ignore
-
-    response = resp_value_object | resp_value_array | \
-            (-tok('ARROW') + tok('IDENTIFIER') >> OutputIdentifier)
+    response_output_id = -tok('ARROW') + tok('IDENTIFIER') >> OutputIdentifier
+    response.define(response_object | response_handler | response_array | response_output_id | value) # type: ignore
 
     http_block: Parser[Token, HTTPStatement] = \
             tok('HTTP') + headers + maybe(-tok('DASH') + http_body) + response \

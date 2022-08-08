@@ -23,6 +23,12 @@ class OutputIdentifier(Identifier):
     def __repr__(self) -> str:
         return f'OutputIdentifier({super(Identifier, self).__repr__()})'
 
+class OptionalOutputIdentifier(Identifier):
+    __slots__: Sequence[str] = tuple()
+
+    def __repr__(self) -> str:
+        return f'OptionalOutputIdentifier({super(Identifier, self).__repr__()})'
+
 class _Placeholder:
     __slots__: Sequence[str] = tuple()
 
@@ -66,7 +72,7 @@ class PythonStatement(Statement):
 
     def compile(self, indent: str = '') -> str:
         return (
-            f'{indent}async with __limit:\n'
+            f'{indent}async with __stmt_limit:\n'
             f'{indent}    __lib.LOG.info("Running python: " {repr(self.source.strip())})\n'
             f'{indent}    {self.source.strip()}\n'
         )
@@ -77,7 +83,7 @@ class ShellStatement(Statement):
 
     def compile(self, indent: str = '') -> str:
         return (
-            f'{indent}async with __limit:\n'
+            f'{indent}async with __stmt_limit:\n'
             f'{indent}    __lib.LOG.info("Running shell: " {repr(self.source.strip())})\n'
             f'{indent}    await __lib.run_shell(f{repr(self.source.strip())})\n'
         )
@@ -98,16 +104,28 @@ class HTTPStatement(Statement):
             f'{indent}}}'
         )
 
+    def _output_response_object_element(
+            self, sfx: str, path: str, key: str, value: ResponseTemplate, indent: str) -> str:
+        new_sfx = str(id(value))
+        if isinstance(value, OptionalOutputIdentifier):
+            return (
+                f'{indent}__p{new_sfx} = __p{sfx}.get({repr(key)}, None)\n' +
+                self._output_response_general(value, new_sfx, f'{path}.{key}', indent) +
+                f'{indent}del __p{new_sfx}\n'
+            )
+        return (
+            f'{indent}assert {repr(key)} in __p{sfx}, f"{path} in response has no key " + repr({repr(key)})\n'
+            f'{indent}__p{new_sfx} = __p{sfx}[{repr(key)}]\n' +
+            self._output_response_general(value, new_sfx, f'{path}.{key}', indent) +
+            f'{indent}del __p{new_sfx}\n'
+        )
+
     def _output_response_object(
             self, response: ResponseTemplateObject, sfx: str, path: str, indent: str) -> str:
         return (
             f'{indent}assert isinstance(__p{sfx}, dict), f"{path} in response is not an object"\n' +
-            ''.join((
-                f'{indent}assert {repr(k)} in __p{sfx}, f"{path} in response has no key " + repr({repr(k)})\n'
-                f'{indent}__p{id(r)} = __p{sfx}[{repr(k)}]\n' +
-                self._output_response_general(r, str(id(r)), f'{path}.{k}', indent) +
-                f'{indent}del __p{id(r)}\n'
-            ) for k, r in response.items())
+            ''.join(self._output_response_object_element(sfx, path, k, r, indent)
+                    for k, r in response.items())
         )
 
     def _output_response_array_element(
@@ -147,7 +165,7 @@ class HTTPStatement(Statement):
             self, response: ResponseTemplate, sfx: str, path: str, indent: str = '') -> str:
         if isinstance(response, _Placeholder):
             return ''
-        if isinstance(response, OutputIdentifier):
+        if isinstance(response, OutputIdentifier | OptionalOutputIdentifier):
             return f'{indent}{response} = __p{sfx}\n'
         elif isinstance(response, str | int | float | bool | None | Identifier):
             return (
@@ -179,13 +197,28 @@ class HTTPStatement(Statement):
                 f'{indent}__headers{sfx} = {self._output_headers(indent)}\n'
                 f'{indent}__body{sfx} = {body_value}\n'
                 f'{indent}__url{sfx} = f{repr(self.url)}\n'
-                f'{indent}async with __limit:\n'
-                f'{indent}    __lib.LOG.info(f"Running {self.method} request to: {{__url{sfx}}}")\n'
-                f'{indent}    __lib.LOG.debug(f"Headers: {{__headers{sfx}}}, body: {{__body{sfx}}}")\n'
-                f'{indent}    async with __session.{self.method.lower()}(__url{sfx}, '
-                                      f'headers=__headers{sfx}, {data_arg}) as __response{sfx}:\n'
-                f'{indent}        __p{sfx} = await __response{sfx}.{response_type}()\n'
-                f'{indent}__lib.LOG.debug(f"Response for {{__url{sfx}}}: {{__p{sfx}}}")\n'
-                f'{self._output_response(sfx, indent)}'
-                f'{indent}del __headers{sfx}, __body{sfx}, __url{sfx}, __p{sfx}, __response{sfx}\n'
+                f'{indent}__retry_delay{sfx} = __http_retry.base_delay\n'
+                f'{indent}for __retry{sfx} in range(1, __http_retry.retry_count + 1):\n'
+                f'{indent}    await __http_limit.get_token()\n'
+                f'{indent}    try:\n'
+                f'{indent}        async with __stmt_limit:\n'
+                f'{indent}                __lib.LOG.info(f"Running {self.method} request to: {{__url{sfx}}}," '
+                                                       f'f"attempt {{__retry{sfx}}} / {{__http_retry.retry_count}}")\n'
+                f'{indent}                __lib.LOG.debug(f"Headers: {{__headers{sfx}}}, body: {{__body{sfx}}}")\n'
+                f'{indent}                async with __session.{self.method.lower()}(__url{sfx}, '
+                                                  f'headers=__headers{sfx}, {data_arg}) as __response{sfx}:\n'
+                f'{indent}                    __p{sfx} = await __response{sfx}.{response_type}()\n'
+                f'{indent}        __lib.LOG.debug(f"Response for {{__url{sfx}}}: {{__p{sfx}}}")\n'
+                f'{self._output_response(sfx, indent + " " * 8)}'
+                f'{indent}        del __p{sfx}, __response{sfx}\n'
+                f'{indent}        break\n'
+                f'{indent}    except Exception as e:\n'
+                f'{indent}        __lib.LOG.warning(f"{self.method} request to {{__url{sfx}}} failed "'
+                                                  f'f"({{__retry{sfx}}} / {{__http_retry.retry_count}}): {{e}}")\n'
+                f'{indent}    if __retry{sfx} != __http_retry.retry_count:\n'
+                f'{indent}        await asyncio.sleep(__retry_delay{sfx})\n'
+                f'{indent}        __retry_delay{sfx} = min(2 * __retry_delay{sfx}, __http_retry.max_delay)\n'
+                f'{indent}else:\n'
+                f'{indent}    raise RuntimeError("{self.method} request to {{__url{sfx}}} failed.")\n'
+                f'{indent}del __headers{sfx}, __body{sfx}, __url{sfx}, __retry{sfx}, __retry_delay{sfx}\n'
         )

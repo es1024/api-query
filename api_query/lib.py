@@ -1,8 +1,14 @@
+"""
+    Helper functions used by the generated script.
+"""
+
 import asyncio
+import time
 import importlib
 import logging
 import sys
 from types import TracebackType
+from typing import NamedTuple
 
 
 LOG = logging.getLogger('query')
@@ -38,6 +44,45 @@ class ConcurrencyLimit:
         self.semaphore.release()
 
 
+class RateLimit:
+    def __init__(self, max_qps: int) -> None:
+        self.token_interval = 1.0 / max_qps
+        self.last_token_time = 0
+        self.max_tokens = max_qps
+        self.tokens = max_qps
+        self.lock = asyncio.Lock()
+        self.semaphore = asyncio.BoundedSemaphore(self.tokens)
+
+    async def _update_tokens(self) -> None:
+        while True:
+            async with self.lock:
+                now = time.time()
+                if self.tokens < self.max_tokens and now - self.last_token_time > self.token_interval:
+                    new_tokens = min(self.max_tokens - self.tokens,
+                                     int((now - self.last_token_time) / self.token_interval))
+                    self.tokens += new_tokens
+                    if self.tokens == self.max_tokens:
+                        self.last_token_time = now
+                    else:
+                        self.last_token_time += new_tokens * self.token_interval
+                    for _ in range(new_tokens):
+                        self.semaphore.release()
+            await asyncio.sleep(self.token_interval)
+
+    async def get_token(self) -> None:
+        update_task = asyncio.create_task(self._update_tokens())
+        acquire_task = asyncio.create_task(self.semaphore.acquire())
+        finished, unfinished = await asyncio.wait({update_task, acquire_task},
+                                                  return_when=asyncio.FIRST_COMPLETED)
+        for task in finished:
+            task.result()
+        assert acquire_task in finished
+        for task in unfinished:
+            task.cancel()
+        async with self.lock:
+            self.tokens -= 1
+
+
 def resolve_imports() -> None:
     frame = sys._getframe().f_back # type: ignore[reportPrivateUsage]
     assert frame is not None
@@ -58,3 +103,9 @@ async def run_shell(command: str) -> None:
     await proc.communicate()
     if proc.returncode != 0:
         raise RuntimeError(f'`{command}` failed with return code {proc.returncode}')
+
+
+class RetryConfig(NamedTuple):
+    retry_count: int
+    base_delay: float
+    max_delay: float

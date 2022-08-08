@@ -10,6 +10,14 @@ def main() -> None:
                         help="Only compile the query and print resulting Python code to stdout.")
     parser.add_argument("--max-concurrent", type=int, default=1,
                         help="Max number of concurrent statement executions allowed.")
+    parser.add_argument("--http-rate-limit", type=int, default=1,
+                        help="Max number of HTTP queries per second.")
+    parser.add_argument("--http-retry-count", type=int, default=1,
+                        help="Max number of times to retry HTTP queries.")
+    parser.add_argument("--http-base-delay", type=float, default=1.0,
+                        help="Base delay between HTTP query retries.")
+    parser.add_argument("--http-max-delay", type=float, default=10.0,
+                        help="Max delay between HTTP query retries.")
     parser.add_argument("--log-level", type=str, default='info',
                         choices=['debug', 'info', 'warning', 'error', 'fatal'],
                         help="Log level.")

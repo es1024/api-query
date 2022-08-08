@@ -188,6 +188,7 @@ _SPECS = [
     ('SPACE', r'\s+', match_simple),
     ('COLON', r':', match_simple),
     ('ARROW', r'->', match_simple),
+    ('QMARK', r'\?', match_simple),
     ('LBRACKET', r'{', match_simple),
     ('RBRACKET', r'}', match_simple),
     ('LSQUARE', r'\[', match_simple),

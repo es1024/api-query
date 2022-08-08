@@ -1,0 +1,9 @@
+GET https://hacker-news.firebaseio.com/v0/newstories.json
+[
+    -> STORY_ID
+
+    GET https://hacker-news.firebaseio.com/v0/item/{STORY_ID}.json
+    { title? -> TITLE, url? -> URL }
+
+    ! print(f'Story {STORY_ID}: {TITLE} ({URL})')
+]
